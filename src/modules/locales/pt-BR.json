@@ -1,0 +1,10 @@
+{
+    "greetings": {
+        "welcome": "Bem-vindo ao servidor!",
+        "goodbye": "Adeus!"
+    },
+    "errors": {
+        "generic": "Ocorreu um erro. Por favor, tente novamente mais tarde.",
+        "not_found": "O recurso solicitado não foi encontrado."
+    }
+}
