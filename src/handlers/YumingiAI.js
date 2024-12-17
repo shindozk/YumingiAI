@@ -1,4 +1,4 @@
-const { joinVoiceChannel, EndBehaviorType } = require('@discordjs/voice');
+const { joinVoiceChannel, EndBehaviorType, createAudioPlayer, createAudioResource, AudioPlayerStatus } = require('@discordjs/voice');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 const { pipeline } = require('stream');
 const prism = require('prism-media');
@@ -7,6 +7,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 const util = require('util');
 const exec = util.promisify(require('child_process').exec);
+const axios = require('axios');
 const { ApexListener, ApexChat } = require('apexify.js');
 const { QuickDB } = require("quick.db");
 const db = new QuickDB();
@@ -123,7 +124,7 @@ module.exports = {
                     pipeline(audioStream, opusDecoder, ffmpeg.stdin, err => {
                         if (err) {
                             if (err.code === 'ERR_STREAM_PREMATURE_CLOSE') {
-                                console.warn(`Stream encerrado prematuramente para ${user.tag}.`);
+                                return;
                             } else {
                                 console.error(`Erro ao processar áudio de ${user.tag}:`, err);
                             }
@@ -152,13 +153,13 @@ module.exports = {
                             const options = {
                                 filepath: relativeAudioPath,
                                 model: 'gemini-pro',
-                                prompt: 'Fale usando o idioma identificado do audio, o inglês não será mais o padrão e também melhore ou adapte o texto caso não der para entender.'
+                                prompt: 'Fale usando o idioma identificado do áudio e melhore o texto se necessário.'
                             };
 
                             const response = await ApexListener(options);
                             const transcribedText = response.transcribe;
 
-                            console.log(`Transcrição: ${transcribedText}`)
+                            console.log(`Transcrição: ${transcribedText}`);
 
                             // Enviar transcrição
                             await interaction.followUp({ content: `Transcrição: ${transcribedText}`, ephemeral: true });
@@ -168,19 +169,71 @@ module.exports = {
                                 userId: member.id,
                                 memory: true,
                                 limit: 12,
-                                instruction: 'Você é um assistente amigável. Seu nome é Yumingi.'
+                                instruction: 'Você é uma IA de voz amigável, comediante e romântica chamada Yumingi.'
                             };
-
+                            
                             const chatResponse = await ApexChat('v3', transcribedText, chatOptions);
 
-                            console.log(`Chatbot: ${chatResponse}`)
+                            console.log(`Chatbot: ${chatResponse}`);
 
                             // Enviar resposta do chatbot
                             await interaction.followUp({ content: `Chatbot: ${chatResponse}`, ephemeral: true });
 
-                            // Excluir o arquivo de áudio após todo o processamento
-                            fs.unlinkSync(sessionAudioPath);
-                            console.log(`Áudio ${sessionAudioPath} excluído.`);
+                            // Converter resposta do chatbot em áudio (Text-to-Speech)
+                            const ttsOptions = {
+                                method: 'POST',
+                                url: 'https://realistic-text-to-speech.p.rapidapi.com/v3/generate_voice_over_v2',
+                                headers: {
+                                    'x-rapidapi-key': '195d9d56f0mshf2ef5b15de50facp11ef65jsn7dbd159005d4',
+                                    'x-rapidapi-host': 'realistic-text-to-speech.p.rapidapi.com',
+                                    'Content-Type': 'application/json'
+                                },
+                                data: {
+                                    voice_obj: {
+                                        id: 2057,
+                                        voice_id: 'pt-BR-Neural2-C',
+                                        gender: 'Female',
+                                        language_code: 'pt-BR',
+                                        language_name: 'Portuguese',
+                                        voice_name: 'Camila',
+                                        sample_text: chatResponse
+                                    },
+                                    json_data: [
+                                        {
+                                            block_index: 0,
+                                            text: chatResponse
+                                        }
+                                    ]
+                                }
+                            };
+
+                            const ttsResponse = await axios.request(ttsOptions);
+                            const audioURL = ttsResponse.data.audio_url;
+                            console.log(ttsResponse.data)
+
+                            // Baixar o áudio gerado
+                            const audioPath = path.join(recordingsDir, `response_${timestamp}.mp3`);
+                            const writer = fs.createWriteStream(audioPath);
+                            const audioRequest = await axios.get(audioURL, { responseType: 'stream' });
+                            audioRequest.data.pipe(writer);
+
+                            await new Promise((resolve, reject) => {
+                                writer.on('finish', resolve);
+                                writer.on('error', reject);
+                            });
+
+                            // Reproduzir o áudio no canal de voz
+                            const player = createAudioPlayer();
+                            const resource = createAudioResource(audioPath);
+
+                            connection.subscribe(player);
+                            player.play(resource);
+
+                            player.on(AudioPlayerStatus.Idle, () => {
+                                fs.unlinkSync(audioPath); // Excluir o arquivo de áudio após reprodução
+                            });
+
+                            console.log(`Áudio gerado e reproduzido: ${audioPath}`);
                         } catch (error) {
                             console.error('Erro ao processar áudio/chatbot:', error);
                             await interaction.followUp({ content: 'Erro ao processar o áudio/chatbot.', ephemeral: true });
