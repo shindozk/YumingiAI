@@ -153,13 +153,15 @@ module.exports = {
                             const options = {
                                 filepath: relativeAudioPath,
                                 model: 'gemini-pro',
-                                prompt: 'Fale usando o idioma identificado do áudio e melhore o texto se necessário.'
+                                lang: 'pt',
+                                prompt: 'Fale usando o idioma identificado no áudio e melhore o texto se necessário (caso não der para entender). Inglês não será mas padrão.'
                             };
 
-                            const response = await ApexListener(options);
+                            const { response, transcribe } = await ApexListener(options);
                             const transcribedText = response.transcribe;
 
                             console.log(`Transcrição: ${transcribedText}`);
+                            console.log(`Transcrição 2: ${transcribe}`);
 
                             // Enviar transcrição
                             await interaction.followUp({ content: `Transcrição: ${transcribedText}`, ephemeral: true });
@@ -169,7 +171,7 @@ module.exports = {
                                 userId: member.id,
                                 memory: true,
                                 limit: 12,
-                                instruction: 'Você é uma IA de voz amigável, comediante e romântica chamada Yumingi.'
+                                instruction: 'Você é uma IA de voz amigável, comediante e romântica chamada Yumingi. Fale de forma mas resumida como uma conversa normal sem ser muito robotizada, pois você conversa por voz, então tem que ser algo mais natural.'
                             };
                             
                             const chatResponse = await ApexChat('v3', transcribedText, chatOptions);
