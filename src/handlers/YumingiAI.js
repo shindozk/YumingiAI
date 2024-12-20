@@ -124,10 +124,12 @@ module.exports = {
                             filepath: relativeAudioPath, lang: 'pt', model: 'gemini-pro'
                         });
 
-                        await interaction.followUp({ content: `Transcrição: ${response.transcribe}`, ephemeral: true });
+                        const transcribedText = response.transcribe;
+
+                        await interaction.followUp({ content: `Transcrição: ${transcribedText}`, ephemeral: true });
 
                         // Enviar ao chatbot
-                        const chatResponse = await ApexChat('v3', response.transcribe, { 
+                        const chatResponse = await ApexChat('v3', transcribedText, { 
                             userId: member.id, memory: true, limit: 12, 
                             instruction: 'Você é uma IA amigável e divertida chamada Yumingi.'
                         });
@@ -215,4 +217,3 @@ module.exports = {
         });
     }
 };
-            
