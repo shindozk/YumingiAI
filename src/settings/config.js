@@ -2,7 +2,7 @@
 
 module.exports = {
     //Client Options
-  token: "MTMxNjUxOTUyNDQ0MjMwODY1MA.GytpGF.p1KVAkxYfk_gq7Vo7t27bCcLknMm4rfI6jWjac",
+  token: "",
   client_id: `1316519524442308650`,
   guild_id: `845346842405503077`,
   owner_id: `677881458014158888`,
