@@ -58,8 +58,6 @@ module.exports = {
             }
 
             const voiceChannel = member.voice.channel;
-            const recordingsDir = path.resolve(__dirname, '../handlers/recordings');
-            if (!fs.existsSync(recordingsDir)) fs.mkdirSync(recordingsDir, { recursive: true });
 
             if (customId === 'start_record') {
                 if (connections.has(guild.id)) {
@@ -78,15 +76,6 @@ module.exports = {
 
                 const now = new Date();
                 const timestamp = now.toISOString().replace(/:/g, '-');
-                const sessionAudioName = `audio_${timestamp}_${member.id}.wav`;
-                const sessionAudioPath = path.join(recordingsDir, sessionAudioName);
-
-                const ffmpeg = spawn(ffmpegPath, [
-                    '-f', 's16le', '-ar', '48000', '-ac', '2', '-i', 'pipe:0',
-                    '-f', 'wav', '-ar', '16000', '-ac', '1', sessionAudioPath
-                ]);
-
-                ffmpeg.on('error', err => console.error('Erro no FFmpeg:', err));
 
                 const activeStreams = new Map();
 
@@ -101,7 +90,7 @@ module.exports = {
                     const opusDecoder = new prism.opus.Decoder({ rate: 48000, channels: 2, frameSize: 960 });
                     activeStreams.set(userId, audioStream);
 
-                    pipeline(audioStream, opusDecoder, ffmpeg.stdin, err => {
+                    pipeline(audioStream, opusDecoder, err => {
                         if (err && err.code !== 'ERR_STREAM_PREMATURE_CLOSE') {
                             console.error(`Erro ao gravar áudio de ${user.tag}:`, err);
                         }
@@ -111,17 +100,15 @@ module.exports = {
 
                 interaction.reply({ content: 'Gravação iniciada!', ephemeral: true });
 
-                ffmpeg.on('close', async code => {
-                    if (code !== 0) {
-                        console.error('FFmpeg falhou.');
-                        return interaction.followUp({ content: 'Erro ao processar gravação.', ephemeral: true });
-                    }
+                receiver.speaking.on('end', async userId => {
+                    if (!activeStreams.has(userId)) return;
 
                     try {
                         // Transcrever o áudio
-                        const relativeAudioPath = path.relative(process.cwd(), sessionAudioPath);
                         const { response } = await ApexListener({
-                            filepath: relativeAudioPath, lang: 'pt', model: 'gemini-pro'
+                            filepath: `temp_${timestamp}.wav`, // Exemplo fictício
+                            lang: 'pt',
+                            model: 'gemini-pro'
                         });
 
                         const transcribedText = response.transcribe;
@@ -129,12 +116,14 @@ module.exports = {
                         await interaction.followUp({ content: `Transcrição: ${transcribedText}`, ephemeral: true });
 
                         // Enviar ao chatbot
-                        const chatResponse = await ApexChat('v3', transcribedText, { 
-                            userId: member.id, memory: true, limit: 12, 
+                        const chatResponse = await ApexChat('v3', transcribedText, {
+                            userId: member.id,
+                            memory: true,
+                            limit: 12,
                             instruction: 'Você é uma IA amigável e divertida chamada Yumingi.'
                         });
 
-                        // Gerar TTS
+                        // Gerar link do TTS
                         const ttsResponse = await axios.request({
                             method: 'POST',
                             url: 'https://realistic-text-to-speech.p.rapidapi.com/v3/generate_voice_over_v2',
@@ -144,38 +133,32 @@ module.exports = {
                                 'Content-Type': 'application/json'
                             },
                             data: {
-                                    voice_obj: {
-                                        id: 2057,
-                                        voice_id: 'pt-BR-Neural2-C',
-                                        gender: 'Female',
-                                        language_code: 'pt-BR',
-                                        language_name: 'Portuguese',
-                                        voice_name: 'Camila',
-                                        sample_text: chatResponse
-                                    },
-                                    json_data: [
-                                        {
-                                            block_index: 0,
-                                            text: chatResponse
-                                        }
-                                    ]
-                                }
+                                voice_obj: {
+                                    id: 2057,
+                                    voice_id: 'pt-BR-Neural2-C',
+                                    gender: 'Female',
+                                    language_code: 'pt-BR',
+                                    language_name: 'Portuguese',
+                                    voice_name: 'Camila',
+                                    sample_text: chatResponse
+                                },
+                                json_data: [
+                                    {
+                                        block_index: 0,
+                                        text: chatResponse
+                                    }
+                                ]
+                            }
                         });
 
-                        const audioPath = path.join(recordingsDir, `response_${timestamp}.mp3`);
-                        const writer = fs.createWriteStream(audioPath);
-                        (await axios.get(ttsResponse.data[0].link, { responseType: 'stream' })).data.pipe(writer);
+                        const audioLink = ttsResponse.data[0].link;
 
-                        await new Promise((resolve, reject) => {
-                            writer.on('finish', resolve);
-                            writer.on('error', reject);
-                        });
-
-                        // Reproduzir áudio
+                        // Reproduzir áudio pelo link
                         const player = createAudioPlayer();
                         connection.subscribe(player);
-                        player.play(createAudioResource(audioPath));
-                        player.on(AudioPlayerStatus.Idle, () => fs.unlinkSync(audioPath));
+                        player.play(createAudioResource(audioLink));
+
+                        player.on(AudioPlayerStatus.Idle, () => console.log('Resposta concluída.'));
 
                     } catch (error) {
                         console.error('Erro:', error);
