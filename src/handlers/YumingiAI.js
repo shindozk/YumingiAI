@@ -164,7 +164,7 @@ module.exports = {
 
                         const audioPath = path.join(recordingsDir, `response_${timestamp}.mp3`);
                         const writer = fs.createWriteStream(audioPath);
-                        (await axios.get(ttsResponse.data.audio_url, { responseType: 'stream' })).data.pipe(writer);
+                        (await axios.get(ttsResponse.data[0].link, { responseType: 'stream' })).data.pipe(writer);
 
                         await new Promise((resolve, reject) => {
                             writer.on('finish', resolve);
