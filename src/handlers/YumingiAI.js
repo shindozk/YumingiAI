@@ -153,12 +153,15 @@ module.exports = {
 
                         const audioLink = ttsResponse.data[0].link;
 
-                        // Reproduzir áudio pelo link
-                        const player = createAudioPlayer();
-                        connection.subscribe(player);
-                        player.play(createAudioResource(audioLink));
+                        // Adicionar tempo de espera antes de reproduzir o áudio
+                        setTimeout(() => {
+                            // Reproduzir áudio pelo link
+                            const player = createAudioPlayer();
+                            connection.subscribe(player);
+                            player.play(createAudioResource(audioLink));
 
-                        player.on(AudioPlayerStatus.Idle, () => console.log('Resposta concluída.'));
+                            player.on(AudioPlayerStatus.Idle, () => console.log('Resposta concluída.'));
+                        }, 5000); // Espera de 5 segundos para o TTS ser gerado
 
                     } catch (error) {
                         console.error('Erro:', error);
